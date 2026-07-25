@@ -1,0 +1,60 @@
+version: 2
+
+models:
+  - name: stg_platform__events
+    description: Normalized, deduplicated platform event stream. One row per event.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: developer_id
+        tests: [not_null]
+      - name: event_name
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - signup_completed
+                - onboarding_step_viewed
+                - onboarding_completed
+                - service_created
+                - deploy_succeeded
+                - service_heartbeat
+                - support_ticket_opened
+              config:
+                severity: warn   # new event types shouldn't break the DAG
+      - name: event_at
+        tests: [not_null]
+
+  - name: stg_platform__developers
+    description: Latest GitHub profile snapshot per developer.
+    columns:
+      - name: developer_id
+        tests: [unique, not_null]
+      - name: repo_count
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                severity: warn
+      - name: commit_streak
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                severity: warn
+
+  - name: stg_platform__exposures
+    description: First exposure per developer per experiment, with contamination signal.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [developer_id, experiment_id]
+    columns:
+      - name: developer_id
+        tests: [not_null]
+      - name: variant
+        tests:
+          - not_null
+          - accepted_values:
+              values: [control, treatment]
+      - name: exposed_at
+        tests: [not_null]

@@ -1,0 +1,64 @@
+version: 2
+
+models:
+  - name: experiment_assignments
+    description: >
+      One row per developer enrolled in the autoscaling-tip onboarding
+      experiment. First exposure defines arm and assignment time; users who
+      saw both variants are flagged is_contaminated and excluded downstream.
+    columns:
+      - name: developer_id
+        tests: [unique, not_null]
+      - name: variant
+        tests:
+          - not_null
+          - accepted_values:
+              values: [control, treatment]
+      - name: assigned_at
+        tests: [not_null]
+      - name: is_contaminated
+        description: >
+          True when the developer was exposed to both arms. Monitor the rate —
+          anything above ~0.5% suggests an assignment bug upstream.
+
+  - name: pre_experiment_covariates
+    description: >
+      Leakage-safe covariates per assigned developer, measured strictly
+      before assigned_at. pre_experiment_score is the CUPED covariate.
+    columns:
+      - name: developer_id
+        tests: [unique, not_null]
+      - name: account_age_days
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: pre_experiment_score
+        description: Bounded 0-1 composite of profile depth and pre-period activity.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+
+  - name: user_metrics
+    description: >
+      Primary, secondary, and guardrail metrics per assigned developer,
+      windowed on each user's own assignment timestamp. Readouts must
+      filter on is_mature.
+    columns:
+      - name: developer_id
+        tests: [unique, not_null]
+      - name: retained_30d
+        description: "Primary metric: active service signal in days [30, 37) post-assignment."
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 1]
+              quote: false
+      - name: services_created_30d
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+      - name: is_mature
+        description: True once the developer is 37+ days past assignment and retained_30d is valid.
+        tests: [not_null]

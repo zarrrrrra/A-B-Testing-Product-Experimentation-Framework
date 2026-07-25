@@ -1,0 +1,66 @@
+version: 2
+
+sources:
+  - name: raw_platform
+    description: >
+      Landing zone for raw platform telemetry. In production these tables are
+      loaded by the event pipeline; in this project they are populated from
+      data/simulate_cohort.py output so the dbt layer can be developed and
+      tested against the same shapes it would see in a real warehouse.
+    schema: raw
+    tables:
+      - name: events
+        description: >
+          Append-only event stream. One row per client/server event. May
+          contain duplicates (at-least-once delivery) — staging dedupes.
+        columns:
+          - name: event_id
+            description: Globally unique event identifier (idempotency key).
+          - name: user_id
+            description: Developer account the event belongs to.
+          - name: event_name
+            description: >
+              Event type. Expected values include signup_completed,
+              onboarding_step_viewed, onboarding_completed, service_created,
+              deploy_succeeded, service_heartbeat, support_ticket_opened.
+          - name: event_ts
+            description: Event timestamp (UTC).
+          - name: properties
+            description: JSON payload with event-specific attributes.
+
+      - name: developers
+        description: >
+          Developer profile snapshots sourced from the GitHub public API by
+          data/github_fetch.py. A developer may appear multiple times (one row
+          per fetch) — staging keeps the latest snapshot.
+        columns:
+          - name: user_id
+            description: Developer account identifier (joins to events.user_id).
+          - name: github_login
+            description: GitHub username the profile was fetched for.
+          - name: account_created_at
+            description: When the GitHub account was created.
+          - name: public_repo_count
+            description: Number of public repositories at fetch time.
+          - name: top_language
+            description: Most frequent language across recent public repos.
+          - name: commit_streak_days
+            description: Consecutive days with commit activity at fetch time.
+          - name: fetched_at
+            description: When this snapshot was pulled from the API.
+
+      - name: experiment_exposures
+        description: >
+          One row each time a user is exposed to an experiment variant
+          (e.g. the autoscaling tip card rendering during onboarding).
+        columns:
+          - name: exposure_id
+            description: Unique exposure event identifier.
+          - name: user_id
+            description: Developer account that was exposed.
+          - name: experiment_id
+            description: Experiment key, e.g. autoscaling_tip_onboarding_v1.
+          - name: variant
+            description: Assigned arm — control or treatment.
+          - name: exposed_at
+            description: Exposure timestamp (UTC).
